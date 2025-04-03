@@ -1,84 +1,173 @@
 // Create the 'basemap' tile layer that will be the background of our map.
+var defaultMap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+	maxZoom: 19,
+	attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+});
 
+//grayscale layer
+var grayscale = L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}{r}.{ext}', {
+	minZoom: 0,
+	maxZoom: 20,
+	attribution: '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://www.stamen.com/" target="_blank">Stamen Design</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+	ext: 'png'
+});
 
-// OPTIONAL: Step 2
-// Create the 'street' tile layer as a second background of the map
+// water color layer 
+var waterColor = L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.{ext}', {
+	minZoom: 1,
+	maxZoom: 16,
+	attribution: '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://www.stamen.com/" target="_blank">Stamen Design</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+	ext: 'jpg'
+});
 
+//topography 
+let topoMap = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+	maxZoom: 17,
+	attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+});
 
-// Create the map object with center and zoom options.
+//make the bsaemaps objects 
+let basemaps= {
+  GrayScale: grayscale ,
+  "Water Color": waterColor,
+  "Topography" : topoMap,
+  Default : defaultMap, 
+};
 
+//map object 
+var myMap= L.map("map", {
+    center: [36.7783, -119.4179],
+    zoom: 5,
+    layers: [defaultMap, grayscale, waterColor, topoMap]
+});
 
-// Then add the 'basemap' tile layer to the map.
+//add the default map to the map 
+defaultMap.addTo(myMap);
 
-// OPTIONAL: Step 2
-// Create the layer groups, base maps, and overlays for our two sets of data, earthquakes and tectonic_plates.
-// Add a control to the map that will allow the user to change which layers are visible.
+//add the Layer control 
+ 
 
+  //get the data for the tectonic plates and draw on the map 
+  //variable to hold the tecctonic plates layer 
+let tectonicplates = new L.layerGroup();
 
-// Make a request that retrieves the earthquake geoJSON data.
-d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson").then(function (data) {
+ d3.json("https://raw.githubusercontent.com/fraxen/tectonicplates/refs/heads/master/GeoJSON/PB2002_boundaries.json")
+ .then(function(plateData){
+  L.geoJson(plateData, { 
+    color: "yellow", 
+    weight: 1
+  }).addTo(tectonicplates);
+  
+ });
 
-  // This function returns the style data for each of the earthquakes we plot on
-  // the map. Pass the magnitude and depth of the earthquake into two separate functions
-  // to calculate the color and radius.
-  function styleInfo(feature) {
+ tectonicplates.addTo(myMap); 
 
-  }
+//create the info for the overlay for the earthquakes data layer
+let earthquakes = new L.layerGroup();
 
-  // This function determines the color of the marker based on the depth of the earthquake.
-  function getColor(depth) {
+//get the data for the earthquake and populate the layer group 
+//call the usgs geojson API 
+d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson")
+.then(
+  function(earthquakeData){
+      console.log(earthquakeData);
+      //plot circles, whee the radius is dep on  the magnitude and color w depth 
+      function dataColor(depth){
+          if (depth > 90)
+            return "red";
+          else if (depth > 70)
+            return "#fc4903";
+          else if (depth > 50) 
+            return "#fc8403";
+          else if (depth > 30)
+            return "#fcad03";
+          else if (depth > 10)
+            return "#cafc03";
+          else 
+          return "green";
+      }
+  function radiusSize(mag){
+    if (mag == 0)
+      return 1; 
+    else 
+      return mag * 5; 
+      }
 
-  }
+      function dataStyle(feature)
+      {
+          return {
+            opacity: .5,
+            fillOpacity: .5,
+            fillColor: dataColor(feature.geometry.coordinates[2]),
+            color: "000000", 
+            radius: radiusSize(feature.properties.mag), 
+            weight: 0.5,
+            stroke: true 
 
-  // This function determines the radius of the earthquake marker based on its magnitude.
-  function getRadius(magnitude) {
+          }
 
-  }
+      }
 
-  // Add a GeoJSON layer to the map once the file is loaded.
-  L.geoJson(data, {
-    // Turn each feature into a circleMarker on the map.
-    pointToLayer: function (feature, latlng) {
+      //add the GeoJson data 
+      L.geoJson(earthquakeData, { 
+        // features 
+        pointToLayer: function(feature, latLng){
+          return L.circleMarker(latLng);
+        },
+        style: dataStyle, 
 
-    },
-    // Set the style for each circleMarker using our styleInfo function.
-    style: styleInfo,
-    // Create a popup for each marker to display the magnitude and location of the earthquake after the marker has been created and styled
-    onEachFeature: function (feature, layer) {
+        onEachFeature: function(feature, layer){
+          layer.bindPopup(`
+            Magnitude: <b>${feature.properties.mag}</b><br>
+            Depth: <b>${feature.geometry.coordinates[2]}</b><br>
+            Location: <b>${feature.properties.place}</b>
+          `);
+               
+        }
 
-    }
-  // OPTIONAL: Step 2
-  // Add the data to the earthquake layer instead of directly to the map.
-  }).addTo(map);
+      }).addTo(earthquakes);
 
-  // Create a legend control object.
-  let legend = L.control({
+   }
+  
+);
+
+ let overlays = {
+    "Tectonic Plates": tectonicplates,
+    "Earthquake Data": earthquakes,
+ };
+
+ L.control 
+  .layers(basemaps, overlays)
+  .addTo(myMap);
+
+let legend = L.control({
     position: "bottomright"
   });
 
-  // Then add all the details for the legend
-  legend.onAdd = function () {
-    let div = L.DomUtil.create("div", "info legend");
+legend.onAdd = function(){
+    let div = L.DomUtil.create("div", "info legend"); 
 
-    // Initialize depth intervals and colors for the legend
+    let intervals = [-10, 10, 30, 50, 70, 90];
 
-
-    // Loop through our depth intervals to generate a label with a colored square for each interval.
-
-
-    return div;
+    let colors = [
+      "green",
+      "#cafc03",
+      "#fcad03",
+      "#fc8403",
+      "#fc4903",
+      "red"
+    ];
+    // loop through the intervals and the colors and generate a label 
+    //with a colored square for each interval 
+    for (let i = 0; i < intervals.length; i++) {
+      div.innerHTML +=
+        "<i style='background:" + colors[i] + "'></i> " +
+        intervals[i] +
+        (intervals[i + 1]
+          ? "&ndash;" + intervals[i + 1] + " km<br>"
+          : "+ km");
+    }
+    return div; 
   };
 
-  // Finally, add the legend to the map.
-
-
-  // OPTIONAL: Step 2
-  // Make a request to get our Tectonic Plate geoJSON data.
-  d3.json("https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json").then(function (plate_data) {
-    // Save the geoJSON data, along with style information, to the tectonic_plates layer.
-
-
-    // Then add the tectonic_plates layer to the map.
-
-  });
-});
+legend.addTo(myMap); 
